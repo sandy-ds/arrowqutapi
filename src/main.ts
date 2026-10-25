@@ -1,47 +1,107 @@
+
 import { NestFactory } from '@nestjs/core';
-
 import { AppModule } from './app.module';
+import { ExpressAdapter } from '@nestjs/platform-express';
+import express = require('express');
+import { Context, Handler } from 'aws-lambda';
+import { configure as serverlessExpress } from '@vendia/serverless-express';
 
-async function bootstrap() {
+let cachedServer: Handler;
 
-  const app =
-    await NestFactory.create(
+async function bootstrapServer(): Promise<Handler> {
+  if (!cachedServer) {
+    const expressApp = express();
+    const app = await NestFactory.create(
       AppModule,
+      new ExpressAdapter(expressApp),
     );
 
-  app.enableCors({
-    origin: true,
-    credentials: true,
-  });
+    app.enableCors({
+      origin: true,
+      credentials: true,
+    });
 
-  await app.listen(
-    process.env.PORT ?? 3001,
-  );
-
-  console.log(
-    '=================================',
-  );
-
-  console.log(
-    '🚀 NestJS Server Started',
-  );
-
-  console.log(
-    '🌐 http://localhost:3001',
-  );
-
-  console.log(
-    '=================================',
-  );
+    await app.init();
+    cachedServer = serverlessExpress({ app: expressApp });
+  }
+  return cachedServer;
 }
 
-bootstrap();
+// For Vercel Serverless Deployment
+export const handler: Handler = async (
+  event: any,
+  context: Context,
+  callback: any,
+) => {
+  const server = await bootstrapServer();
+  return server(event, context, callback);
+};
+
+// Fallback for local development (npm run start:dev)
+if (process.env.NODE_ENV !== 'production') {
+  async function localBootstrap() {
+    const app = await NestFactory.create(AppModule);
+
+    app.enableCors({
+      origin: true,
+      credentials: true,
+    });
+
+    const port = process.env.PORT ?? 3001;
+    await app.listen(port);
+
+    console.log('=================================');
+    console.log('🚀 NestJS Server Started');
+    console.log(`🌐 http://localhost:${port}`);
+    console.log('=================================');
+  }
+  localBootstrap();
+}
 
 // import { NestFactory } from '@nestjs/core';
+
 // import { AppModule } from './app.module';
 
 // async function bootstrap() {
-//   const app = await NestFactory.create(AppModule);
-//   await app.listen(process.env.PORT ?? 3001);
+
+//   const app =
+//     await NestFactory.create(
+//       AppModule,
+//     );
+
+//   app.enableCors({
+//     origin: true,
+//     credentials: true,
+//   });
+
+//   await app.listen(
+//     process.env.PORT ?? 3001,
+//   );
+
+//   console.log(
+//     '=================================',
+//   );
+
+//   console.log(
+//     '🚀 NestJS Server Started',
+//   );
+
+//   console.log(
+//     '🌐 http://localhost:3001',
+//   );
+
+//   console.log(
+//     '=================================',
+//   );
 // }
+
 // bootstrap();
+
+// // import { NestFactory } from '@nestjs/core';
+// // import { AppModule } from './app.module';
+
+// // async function bootstrap() {
+// //   const app = await NestFactory.create(AppModule);
+// //   await app.listen(process.env.PORT ?? 3001);
+// // }
+// // bootstrap();
